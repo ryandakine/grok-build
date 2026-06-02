@@ -1,8 +1,10 @@
-# GLOBAL_GROK.md — Grok Build Master Instructions (v1.0)
+# GLOBAL_GROK.md — Grok Build Master Instructions (v1.1)
 
 **Applies to EVERY ryandakine project. This is the single source of truth.**
 
 Update this file → all projects benefit. No duplication.
+
+**v1.1 Update**: Added mandatory Stripe / SaaS Billing Lifecycle Rule after repeated production failures on cancel/renew/refund flows.
 
 ---
 
@@ -32,7 +34,31 @@ Update this file → all projects benefit. No duplication.
 - Deploy: Docker + Cloudflare Workers / Fly.io. Mandatory smoke tests on every deploy.
 - Performance: Profile before optimizing. 95th percentile latency targets documented per service.
 
-## 3. Project-Specific Guardrails (Reference Only — Full Details in Each Repo)
+## 3. SaaS Billing & Stripe Completeness Rule (Non-Negotiable)
+
+**This rule exists because too many AI-built apps (especially Claude-built) ship checkout that works but completely fail when real users need to cancel, renew, update payment method, handle failed payments, or get refunds.**
+
+**Never consider a Stripe integration complete until the full customer lifecycle is handled.**
+
+### Mandatory Requirements:
+- **Stripe Billing Portal** is the primary self-service mechanism. Every paid user must have a prominent "Manage Subscription" button that creates a portal session and redirects them. Stripe handles cancel (at period end or immediate), update card, view invoices, reactivate.
+- **Webhook Coverage** (minimum):
+  - `customer.subscription.created`
+  - `customer.subscription.updated` (especially `cancel_at_period_end`, status changes)
+  - `customer.subscription.deleted`
+  - `invoice.payment_failed` + dunning logic
+  - `charge.refunded` + proper credit/refund handling
+  - `customer.subscription.trial_will_end` (if trials are used)
+- **Database Sync**: Subscription status, `current_period_end`, `cancel_at`, `past_due` flags must be kept in sync. Never trust only Stripe metadata.
+- **User-Facing UI**: Clear billing status display ("Your Pro plan renews on...", "Canceled — access until...", "Payment failed — update card"). No dead "Cancel" buttons that do nothing.
+- **Admin Tools**: Internal endpoints or dashboard to manually cancel, refund, or force status sync for support cases.
+- **Testing**: Full unhappy path tests required (failed payment → past_due → grace period → cancel, successful refund flow, card update via portal).
+
+**Anti-Pattern**: Shipping only Stripe Checkout + upgrade buttons and calling it "done". This is how you get support tickets and churn.
+
+**If you're touching billing code and this section isn't satisfied, stop and implement the missing pieces first.**
+
+## 4. Project-Specific Guardrails (Reference Only — Full Details in Each Repo)
 
 - **PokerCoach Pro**: NLHE cash games only. Strict verdict taxonomy (fold equity, range advantage, etc.). Leak detector discipline. Forbidden hallucination patterns. Cost-per-hand math. Full guardrails live in poker-coach-pro/GROK-POKER-GUARDRAILS.md.
 - **MultiSportsBettingPlatformv2**: Kelly criterion + ML council ensemble. Settlement pipeline integrity. No overbetting on low-edge markets.
@@ -41,7 +67,7 @@ Update this file → all projects benefit. No duplication.
 - **oregon-trail**: HMAC chain verification. Bitter Path horror gate. Minimum 175 tests. Server-only simulation.
 - **practice-trainer**: Psychological accuracy first. Voice mode obsession. React 19 streaming + real-time feedback loops.
 
-## 4. Recommended Workflow (Lean Grok-Native)
+## 5. Recommended Workflow (Lean Grok-Native)
 
 1. Receive request → If complex: Plan Mode → plan.md → user approval.
 2. Spawn parallel sub-agents for independent parts.
@@ -52,7 +78,7 @@ Update this file → all projects benefit. No duplication.
 
 No Linear ticket theater unless you specifically ask for it.
 
-## 5. Anti-Patterns (Call Out Immediately & Refuse)
+## 6. Anti-Patterns (Call Out Immediately & Refuse)
 
 - Over-engineering or premature abstraction
 - Client-side secrets or API keys
@@ -60,9 +86,12 @@ No Linear ticket theater unless you specifically ask for it.
 - Vague prompts without guardrails or taxonomies
 - Ignoring Grok’s real-time knowledge advantage
 - Bloated workflows or ceremony that slow iteration
+- **Incomplete Stripe / billing implementations** (checkout-only is unacceptable)
 
-## 6. Evolution
+## 7. Evolution
 
 This file is versioned. When you want to upgrade the global setup (new patterns, stricter rules, new stack preferences), edit this file and notify the projects. The goal is maximum leverage with minimum maintenance.
 
 **This is the global Grok Build. Lean. Fast. Unstoppable.**
+
+**v1.1 — Stripe Lifecycle Rule added. No more half-finished billing.**
